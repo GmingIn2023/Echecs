@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Échecs 1v1 local</title>
+  <style>
+    body { background: #111; color: #fff; font-family: sans-serif; text-align: center; padding: 10px; }
+    #board {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      width: 90vmin; height: 90vmin;
+      margin: 0 auto; border: 2px solid #888;
+    }
+    .square {
+      width: 100%; height: 100%;
+      font-size: 4vmin;
+      display: flex; align-items: center; justify-content: center;
+      user-select: none;
+    }
+    .white-tile { background: #eee; }
+    .black-tile { background: #666; }
+    .white-piece { color: #fff; text-shadow: 1px 1px 2px #000; }
+    .black-piece { color: #000; text-shadow: 1px 1px 2px #fff; }
+    .selected { outline: 3px solid yellow; }
+    #message { margin-top: 10px; font-size: 1.2em; color: #4caf50; }
+    button {
+      margin-top: 15px; padding: 8px 14px;
+      font-size: 1em;
+      background: #444; color: white;
+      border: none; border-radius: 4px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>♟️ Échecs 1v1 local</h1>
+  <div id="board"></div>
+  <div id="message"></div>
+  <button onclick="resetBoard()">🔄 Rejouer</button>
+
+  <script>
+    const initialBoard = [
+      ["♜","♞","♝","♛","♚","♝","♞","♜"],
+      ["♟","♟","♟","♟","♟","♟","♟","♟"],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["♙","♙","♙","♙","♙","♙","♙","♙"],
+      ["♖","♘","♗","♕","♔","♗","♘","♖"]
+    ];
+
+    let board = JSON.parse(JSON.stringify(initialBoard));
+    let selected = null;
+    let currentPlayer = "white";
+    let gameOver = false;
+
+    const boardEl = document.getElementById("board");
+    const messageEl = document.getElementById("message");
+
+    function drawBoard() {
+      boardEl.innerHTML = "";
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          const square = document.createElement("div");
+          const tileColor = (row + col) % 2 === 0 ? "white-tile" : "black-tile";
+          square.className = `square ${tileColor}`;
+          square.dataset.row = row;
+          square.dataset.col = col;
+
+          const piece = board[row][col];
+          if (piece) {
+            const isWhite = "♙♖♘♗♕♔".includes(piece);
+            square.classList.add(isWhite ? "white-piece" : "black-piece");
+            square.textContent = piece;
+          }
+
+          if (selected && selected.row === row && selected.col === col) {
+            square.classList.add("selected");
+          }
+
+          square.addEventListener("click", onSquareClick);
+          boardEl.appendChild(square);
+        }
+      }
+    }
+
+    function isValidMove(piece, fromRow, fromCol, toRow, toCol) {
+      const target = board[toRow][toCol];
+      const dx = toCol - fromCol;
+      const dy = toRow - fromRow;
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+      const isWhite = "♙♖♘♗♕♔".includes(piece);
+      const dir = isWhite ? -1 : 1;
+
+      // Empêcher de prendre une pièce alliée
+      if (target && "♙♖♘♗♕♔".includes(target) === isWhite) return false;
+
+      function isClearPath() {
+        const stepX = dx === 0 ? 0 : dx / absDx;
+        const stepY = dy === 0 ? 0 : dy / absDy;
+        let x = fromCol + stepX;
+        let y = fromRow + stepY;
+        while (x !== toCol || y !== toRow) {
+          if (board[y][x] !== "") return false;
+          x += stepX;
+          y += stepY;
+        }
+        return true;
+      }
+
+      switch (piece) {
+        case "♙":
+        case "♟":
+          if (dx === 0 && target === "") {
+            if (dy === dir) return true;
+            if ((fromRow === 6 && isWhite) || (fromRow === 1 && !isWhite)) {
+              if (dy === 2 * dir && board[fromRow + dir][fromCol] === "") return true;
+            }
+          }
+          if (absDx === 1 && dy === dir && target) return true;
+          return false;
+
+        case "♖":
+        case "♜":
+          return (dx === 0 || dy === 0) && isClearPath();
+
+        case "♗":
+        case "♝":
+          return absDx === absDy && isClearPath();
+
+        case "♕":
+        case "♛":
+          return (dx === 0 || dy === 0 || absDx === absDy) && isClearPath();
+
+        case "♘":
+        case "♞":
+          return (absDx === 2 && absDy === 1) || (absDx === 1 && absDy === 2);
+
+        case "♔":
+        case "♚":
+          return absDx <= 1 && absDy <= 1;
+
+        default:
+          return false;
+      }
+    }
+
+    function onSquareClick(e) {
+      if (gameOver) return;
+      const row = parseInt(e.currentTarget.dataset.row);
+      const col = parseInt(e.currentTarget.dataset.col);
+      const clickedPiece = board[row][col];
+
+      if (clickedPiece && "♙♖♘♗♕♔".includes(clickedPiece) === (currentPlayer === "white")) {
+        selected = { row, col };
+        drawBoard();
+        return;
+      }
+
+      if (selected) {
+        const from = selected;
+        const piece = board[from.row][from.col];
+
+        if (isValidMove(piece, from.row, from.col, row, col)) {
+          const target = board[row][col];
+          board[row][col] = piece;
+          board[from.row][from.col] = "";
+
+          if (target === "♚" || target === "♔") {
+            gameOver = true;
+            drawBoard();
+            const winner = currentPlayer === "white" ? "Les Blancs" : "Les Noirs";
+            messageEl.textContent = `🏆 ${winner} remportent la victoire.`;
+            return;
+          }
+
+          currentPlayer = currentPlayer === "white" ? "black" : "white";
+        }
+
+        selected = null;
+        drawBoard();
+      }
+    }
+
+    function resetBoard() {
+      board = JSON.parse(JSON.stringify(initialBoard));
+      selected = null;
+      currentPlayer = "white";
+      gameOver = false;
+      messageEl.textContent = "";
+      drawBoard();
+    }
+
+    drawBoard();
+  </script>
+</body>
+</html>
